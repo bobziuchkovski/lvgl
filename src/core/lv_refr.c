@@ -502,6 +502,24 @@ void lv_obj_refr(lv_layer_t * layer, lv_obj_t * obj)
 
     if(lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return;
 
+    lv_layer_type_t layer_type = lv_obj_get_layer_type(obj);
+
+    /*Trivial reject before the per-object style work: a non-layered widget can
+     *only draw within its coordinates plus ext draw size. If that doesn't
+     *intersect the clip, neither it nor its children (which are clipped to it)
+     *can be visible, so skip it before the style-cascade lookups below. This is
+     *the same overlap test lv_obj_redraw() applies at the clip-intersect step,
+     *hoisted ahead of the style work -- important when many spatially-separated
+     *siblings are walked once per invalidated area (area count times sibling
+     *count). Layered and transformed widgets keep their own area handling.*/
+    if(layer_type == LV_LAYER_TYPE_NONE) {
+        lv_area_t obj_coords_ext;
+        lv_obj_get_coords(obj, &obj_coords_ext);
+        int32_t ext_draw_size = lv_obj_get_ext_draw_size(obj);
+        lv_area_increase(&obj_coords_ext, ext_draw_size, ext_draw_size);
+        if(!lv_area_is_on(&obj_coords_ext, &layer->_clip_area)) return;
+    }
+
     /*If `opa_layered != LV_OPA_COVER` draw the widget on a new layer and blend that layer with the given opacity.*/
     const lv_opa_t opa_layered = lv_obj_get_style_opa_layered(obj, LV_PART_MAIN);
     if(opa_layered <= LV_OPA_MIN) return;
@@ -517,7 +535,6 @@ void lv_obj_refr(lv_layer_t * layer, lv_obj_t * obj)
 
     layer->recolor = lv_obj_style_apply_recolor(obj, LV_PART_MAIN, layer->recolor);
 
-    lv_layer_type_t layer_type = lv_obj_get_layer_type(obj);
     if(layer_type == LV_LAYER_TYPE_NONE) {
         lv_obj_redraw(layer, obj);
     }
